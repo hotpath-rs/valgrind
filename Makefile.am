@@ -116,6 +116,7 @@ ltpchecks: all
 # from having to run configure (bug 188560).
 EXTRA_DIST = \
 	COPYING.DOCS \
+	README.hotpath \
 	README_DEVELOPERS \
 	README_DEVELOPERS_processes \
 	README_PACKAGERS \

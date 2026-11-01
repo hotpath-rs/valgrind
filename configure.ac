@@ -19,8 +19,9 @@ m4_define([v_major_ver], [3])
 m4_define([v_minor_ver], [28])
 m4_define([v_micro_ver], [0])
 # Modified 2026-11-01 by the hotpath-rs project: the suffix marks this
-# unofficial patched build, see README.hotpath.
-m4_define([v_suffix_ver], [hotpath1])
+# unofficial patched build (hotpath<n> matches tag VALGRIND_3_28_0_HOTPATH_<n>),
+# see README.hotpath.
+m4_define([v_suffix_ver], [hotpath2])
 m4_define([v_rel_date], ["23 Oct 2026"])
 m4_define([v_version],
 	  m4_if(v_suffix_ver, [],

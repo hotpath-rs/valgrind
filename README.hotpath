@@ -7,18 +7,37 @@ https://sourceware.org/git/valgrind.git and https://valgrind.org/.
 
 Fork: https://github.com/hotpath-rs/valgrind
 Base: upstream tag VALGRIND_3_28_0 (Valgrind 3.28.0)
-Version string: 3.28.0.hotpath1 (`valgrind --version`, Callgrind `creator:`)
+Version string: 3.28.0.hotpath2 (`valgrind --version`, Callgrind `creator:`)
+Each release tag VALGRIND_<x>_<y>_<z>_HOTPATH_<n> matches the version
+suffix hotpath<n> and is never moved.
 
 
 License
 -------
 
-Valgrind, including every modification listed below, is distributed
-under the GNU General Public License, version 3 or (at your option) any
-later version. See COPYING (and COPYING.DOCS for the documentation).
-The original copyright notices are kept unchanged in every file.
-Binaries built from this fork are covered by the same license; their
-corresponding source is the tagged commit they were built from.
+This fork does not change Valgrind's licensing. Valgrind is licensed
+under the GNU General Public License, version 3 (see COPYING and the
+README). The notice at the top of each file governs that file: most
+allow GPL version 3 or any later version, some carry other terms (for
+example the client headers include/valgrind.h.in and
+callgrind/callgrind.h use a BSD-style license, and some imported files
+are GPL version 2 or later). The documentation is covered by the GNU
+Free Documentation License (COPYING.DOCS).
+
+All original copyright and license notices are kept unchanged. The
+hotpath-rs project claims no ownership of upstream code. Its
+modifications, listed below, are contributed under the GNU General
+Public License, version 3 or (at your option) any later version, and
+each modified file carries a dated notice.
+
+
+Distribution
+------------
+
+Every binary archive built from this fork contains COPYING, COPYING.DOCS
+and README.hotpath, and names the release tag whose commit is its
+complete corresponding source. Source archives made with `make dist`
+include the same files.
 
 
 Modifications
@@ -44,8 +63,16 @@ Modifications
 
 2026-11-01  configure.ac
 
-  Version suffix `hotpath1`, so reports from this build are never
-  mistaken for, or compared with, an official 3.28.0 build.
+  Version suffix `hotpath1` (tag VALGRIND_3_28_0_HOTPATH_1), so reports
+  from this build are never mistaken for, or compared with, an official
+  3.28.0 build.
+
+2026-11-01  README.hotpath, Makefile.am, configure.ac
+
+  License section corrected to describe Valgrind's mixed licensing
+  precisely; README.hotpath added to EXTRA_DIST so source archives carry
+  it; version suffix bumped to `hotpath2` (tag VALGRIND_3_28_0_HOTPATH_2)
+  because the source differs from VALGRIND_3_28_0_HOTPATH_1.
 
 
 Building
