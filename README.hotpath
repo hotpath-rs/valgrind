@@ -37,7 +37,8 @@ Distribution
 Every binary archive built from this fork contains COPYING, COPYING.DOCS
 and README.hotpath, and names the release tag whose commit is its
 complete corresponding source. Source archives made with `make dist`
-include the same files.
+include the same files. Release binaries are built and published by
+.github/workflows/release.yml from the tagged commit.
 
 
 Modifications

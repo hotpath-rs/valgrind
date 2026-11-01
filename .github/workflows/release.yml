@@ -1,0 +1,200 @@
+name: Release
+
+# Builds two Valgrinds for x86_64 and arm64 Linux and smoke-tests them on
+# every supported runner image:
+#
+# - hotpath: this commit, version <x.y.z>.hotpath<n> from configure.ac
+# - official: the unmodified upstream tag VALGRIND_<x>_<y>_<z>
+#
+# Pull requests only build and test. Pushing the tag
+# VALGRIND_<x>_<y>_<z>_HOTPATH_<n>, which must match configure.ac, also
+# publishes both as one GitHub release.
+#
+# Both install to /opt/valgrind (Valgrind compiles its prefix in) and are
+# built on the oldest supported Ubuntu, so one tarball per arch runs on newer
+# images too. The tool binaries are static; only the launcher and preload
+# libraries link glibc.
+on:
+  push:
+    tags: ["VALGRIND_*_HOTPATH_*"]
+  pull_request:
+
+permissions: {}
+
+env:
+  PREFIX: /opt/valgrind
+
+jobs:
+  versions:
+    name: Resolve versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      hotpath_version: ${{ steps.v.outputs.hotpath_version }}
+      official_version: ${{ steps.v.outputs.official_version }}
+      upstream_tag: ${{ steps.v.outputs.upstream_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # configure.ac is the source of truth; a release tag must match it.
+      - id: v
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ver() { sed -n "s/^m4_define(\[v_$1\], *\[\([^]]*\)\]).*/\1/p" configure.ac; }
+          major=$(ver major_ver) minor=$(ver minor_ver) micro=$(ver micro_ver) suffix=$(ver suffix_ver)
+          [[ "$suffix" =~ ^hotpath([0-9]+)$ ]] || { echo "::error::version suffix '$suffix' is not hotpath<n>"; exit 1; }
+          n="${BASH_REMATCH[1]}"
+          if [ "$REF_TYPE" = tag ]; then
+            expected="VALGRIND_${major}_${minor}_${micro}_HOTPATH_$n"
+            [ "$TAG" = "$expected" ] || { echo "::error::tag $TAG does not match configure.ac ($expected)"; exit 1; }
+          fi
+          {
+            echo "hotpath_version=$major.$minor.$micro.$suffix"
+            echo "official_version=$major.$minor.$micro"
+            echo "upstream_tag=VALGRIND_${major}_${minor}_${micro}"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.variant }} (${{ matrix.arch }})
+    needs: versions
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [hotpath, official]
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ matrix.variant == 'hotpath' && needs.versions.outputs.hotpath_version || needs.versions.outputs.official_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.variant == 'official' && needs.versions.outputs.upstream_tag || '' }}
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool make gcc zstd
+      - name: Build and install
+        run: |
+          ./autogen.sh
+          ./configure --prefix="$PREFIX" --enable-only64bit
+          make -j"$(nproc)"
+          make install DESTDIR="$RUNNER_TEMP/stage"
+      # The tag, configure.ac and the binary must agree, or the release would
+      # mislabel what it ships.
+      - name: Check version
+        run: |
+          actual=$(VALGRIND_LIB="$RUNNER_TEMP/stage$PREFIX/libexec/valgrind" \
+            "$RUNNER_TEMP/stage$PREFIX/bin/valgrind" --version)
+          echo "$actual"
+          test "$actual" = "valgrind-$VERSION"
+      # Licenses travel with the binaries (GPLv3); README.hotpath lists the
+      # modifications and exists only in the hotpath variant.
+      - name: Package
+        run: |
+          root="$RUNNER_TEMP/stage$PREFIX"
+          cp COPYING COPYING.DOCS "$root/"
+          if [ -f README.hotpath ]; then cp README.hotpath "$root/"; fi
+          name="valgrind-$VERSION-linux-${{ matrix.arch }}.tar.zst"
+          tar -C "$RUNNER_TEMP/stage/opt" -cf - valgrind | zstd -19 -T0 > "$name"
+          ls -l "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: valgrind-${{ env.VERSION }}-linux-${{ matrix.arch }}
+          path: valgrind-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.zst
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    name: Test ${{ matrix.variant }} on ${{ matrix.runner }}
+    needs: [versions, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [hotpath, official]
+        runner: [ubuntu-24.04, ubuntu-26.04, ubuntu-24.04-arm, ubuntu-26.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ matrix.variant == 'hotpath' && needs.versions.outputs.hotpath_version || needs.versions.outputs.official_version }}
+    steps:
+      - name: Resolve arch
+        id: arch
+        run: |
+          case "$(uname -m)" in
+            x86_64) echo "arch=x86_64" >> "$GITHUB_OUTPUT" ;;
+            aarch64) echo "arch=arm64" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::unsupported $(uname -m)"; exit 1 ;;
+          esac
+      - uses: actions/download-artifact@v4
+        with:
+          name: valgrind-${{ env.VERSION }}-linux-${{ steps.arch.outputs.arch }}
+      - name: Install
+        run: |
+          sudo tar --zstd -xf "valgrind-$VERSION-linux-${{ steps.arch.outputs.arch }}.tar.zst" -C /opt
+          echo "$PREFIX/bin" >> "$GITHUB_PATH"
+      - name: Run Callgrind
+        run: |
+          test "$(valgrind --version)" = "valgrind-$VERSION"
+          valgrind -q --tool=callgrind --callgrind-out-file=true.out /bin/true
+          grep -x "creator: callgrind-$VERSION" true.out
+
+  release:
+    name: Publish release
+    needs: [versions, test]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum -- *.tar.zst > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.zst
+      # `gh release create` uploads the assets before publishing, so this also
+      # works with immutable releases enabled.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          HOTPATH_VERSION: ${{ needs.versions.outputs.hotpath_version }}
+          OFFICIAL_VERSION: ${{ needs.versions.outputs.official_version }}
+          UPSTREAM_TAG: ${{ needs.versions.outputs.upstream_tag }}
+        run: |
+          cat > notes.md <<EOF
+          Unofficial Valgrind builds by the hotpath-rs project. Not affiliated with or endorsed by the Valgrind project.
+
+          - \`valgrind-$HOTPATH_VERSION-*\`: patched build, source [\`$TAG\`](https://github.com/${{ github.repository }}/tree/$TAG). Modifications are listed in [README.hotpath](https://github.com/${{ github.repository }}/blob/$TAG/README.hotpath).
+          - \`valgrind-$OFFICIAL_VERSION-*\`: unmodified upstream Valgrind $OFFICIAL_VERSION, source [\`$UPSTREAM_TAG\`](https://sourceware.org/git/?p=valgrind.git;a=tag;h=refs/tags/$UPSTREAM_TAG).
+
+          Linux x86_64 and arm64, built on Ubuntu 24.04. Extract to \`/opt\`: \`sudo tar --zstd -xf <file> -C /opt\`, then use \`/opt/valgrind/bin/valgrind\`.
+
+          Valgrind is free software under the GNU General Public License, version 3 or later; each archive contains COPYING. Verify downloads with SHA256SUMS or \`gh attestation verify <file> --repo ${{ github.repository }}\`.
+          EOF
+          gh release create "$TAG" --repo "${{ github.repository }}" --verify-tag \
+            --title "Valgrind $HOTPATH_VERSION" --notes-file notes.md \
+            dist/*.tar.zst dist/SHA256SUMS
