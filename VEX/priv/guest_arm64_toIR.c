@@ -25,6 +25,10 @@
    along with this program; if not, see <http://www.gnu.org/licenses/>.
 
    The GNU General Public License is contained in the file COPYING.
+
+   Modified 2026-11-01 by the hotpath-rs project
+   (https://github.com/hotpath-rs/valgrind): an unconditional B is
+   given jump kind Ijk_Boring instead of Ijk_Call. See README.hotpath.
 */
 
 /* KNOWN LIMITATIONS 2014-Nov-16
@@ -7432,7 +7436,10 @@ Bool dis_ARM64_branch_etc(/*MB_OUT*/DisResult* dres, UInt insn,
       }
       putPC(mkU64(guest_PC_curr_instr + simm64));
       dres->whatNext = Dis_StopHere;
-      dres->jk_StopHere = Ijk_Call;
+      /* Only BL is a call. Marking a plain B as Ijk_Call too made
+         Callgrind push a call frame for every intra-function branch,
+         so inclusive costs overlapped (hotpath-rs, 2026-11-01). */
+      dres->jk_StopHere = bLink ? Ijk_Call : Ijk_Boring;
       DIP("b%s 0x%llx\n", bLink == 1 ? "l" : "",
                           guest_PC_curr_instr + simm64);
       return True;
