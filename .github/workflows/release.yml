@@ -3,11 +3,11 @@ name: Release
 # Builds two Valgrinds for x86_64 and arm64 Linux and smoke-tests them on
 # every supported runner image:
 #
-# - hotpath: this commit, version <x.y.z>.hotpath<n> from configure.ac
+# - hotpath: this commit, version <x.y.z>.hotpath-rs from configure.ac
 # - official: the unmodified upstream tag VALGRIND_<x>_<y>_<z>
 #
 # Pull requests only build and test. Pushing the tag
-# VALGRIND_<x>_<y>_<z>_HOTPATH_<n>, which must match configure.ac, also
+# VALGRIND_<x>_<y>_<z>_HOTPATH_RS, which must match configure.ac, also
 # publishes both as one GitHub release.
 #
 # Both install to /opt/valgrind (Valgrind compiles its prefix in) and are
@@ -45,10 +45,9 @@ jobs:
         run: |
           ver() { sed -n "s/^m4_define(\[v_$1\], *\[\([^]]*\)\]).*/\1/p" configure.ac; }
           major=$(ver major_ver) minor=$(ver minor_ver) micro=$(ver micro_ver) suffix=$(ver suffix_ver)
-          [[ "$suffix" =~ ^hotpath([0-9]+)$ ]] || { echo "::error::version suffix '$suffix' is not hotpath<n>"; exit 1; }
-          n="${BASH_REMATCH[1]}"
+          [ "$suffix" = hotpath-rs ] || { echo "::error::version suffix '$suffix' is not hotpath-rs"; exit 1; }
           if [ "$REF_TYPE" = tag ]; then
-            expected="VALGRIND_${major}_${minor}_${micro}_HOTPATH_$n"
+            expected="VALGRIND_${major}_${minor}_${micro}_HOTPATH_RS"
             [ "$TAG" = "$expected" ] || { echo "::error::tag $TAG does not match configure.ac ($expected)"; exit 1; }
           fi
           {

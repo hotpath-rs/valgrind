@@ -7,9 +7,8 @@ https://sourceware.org/git/valgrind.git and https://valgrind.org/.
 
 Fork: https://github.com/hotpath-rs/valgrind
 Base: upstream tag VALGRIND_3_28_0 (Valgrind 3.28.0)
-Version string: 3.28.0.hotpath2 (`valgrind --version`, Callgrind `creator:`)
-Each release tag VALGRIND_<x>_<y>_<z>_HOTPATH_<n> matches the version
-suffix hotpath<n> and is never moved.
+Version string: 3.28.0.hotpath-rs (`valgrind --version`, Callgrind `creator:`)
+Release tag: VALGRIND_3_28_0_HOTPATH_RS, never moved.
 
 
 License
@@ -64,16 +63,14 @@ Modifications
 
 2026-11-01  configure.ac
 
-  Version suffix `hotpath1` (tag VALGRIND_3_28_0_HOTPATH_1), so reports
+  Version suffix `hotpath-rs` (tag VALGRIND_3_28_0_HOTPATH_RS), so reports
   from this build are never mistaken for, or compared with, an official
   3.28.0 build.
 
-2026-11-01  README.hotpath, Makefile.am, configure.ac
+2026-11-01  README.hotpath, Makefile.am
 
-  License section corrected to describe Valgrind's mixed licensing
-  precisely; README.hotpath added to EXTRA_DIST so source archives carry
-  it; version suffix bumped to `hotpath2` (tag VALGRIND_3_28_0_HOTPATH_2)
-  because the source differs from VALGRIND_3_28_0_HOTPATH_1.
+  License section describing Valgrind's mixed licensing precisely;
+  README.hotpath added to EXTRA_DIST so source archives carry it.
 
 
 Building
