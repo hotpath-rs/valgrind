@@ -1,0 +1,57 @@
+Unofficial Valgrind fork maintained by the hotpath-rs project
+=============================================================
+
+This is NOT an official Valgrind release and is not affiliated with or
+endorsed by the Valgrind project. The official sources are at
+https://sourceware.org/git/valgrind.git and https://valgrind.org/.
+
+Fork: https://github.com/hotpath-rs/valgrind
+Base: upstream tag VALGRIND_3_28_0 (Valgrind 3.28.0)
+Version string: 3.28.0.hotpath1 (`valgrind --version`, Callgrind `creator:`)
+
+
+License
+-------
+
+Valgrind, including every modification listed below, is distributed
+under the GNU General Public License, version 3 or (at your option) any
+later version. See COPYING (and COPYING.DOCS for the documentation).
+The original copyright notices are kept unchanged in every file.
+Binaries built from this fork are covered by the same license; their
+corresponding source is the tagged commit they were built from.
+
+
+Modifications
+-------------
+
+2026-11-01  VEX/priv/guest_arm64_toIR.c (arm64 guest, "B{L} uncond")
+
+  An unconditional immediate B (without link) was given jump kind
+  Ijk_Call, the same as BL. Callgrind therefore treated every plain B
+  as a function call: each intra-function branch pushed a call frame,
+  frames piled up (in loops, millions deep) until a real return unwound
+  them, and inclusive costs overlapped. Symptoms: spurious recursion
+  (`fn'2`) in non-recursive functions, including glibc's ld.so, and
+  inclusive costs far above the program total. Exclusive (self) costs
+  were not affected.
+
+  Fix: B gets Ijk_Boring, BL keeps Ijk_Call. A B to the start of
+  another function (a tail call) is still recognised by Callgrind's own
+  jump-to-function-entry handling.
+
+  Possibly related upstream report:
+  https://bugs.kde.org/show_bug.cgi?id=472460
+
+2026-11-01  configure.ac
+
+  Version suffix `hotpath1`, so reports from this build are never
+  mistaken for, or compared with, an official 3.28.0 build.
+
+
+Building
+--------
+
+  ./autogen.sh
+  ./configure --prefix=<install dir>
+  make -j"$(nproc)"
+  make install
