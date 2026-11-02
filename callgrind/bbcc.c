@@ -22,6 +22,11 @@
    along with this program; if not, see <http://www.gnu.org/licenses/>.
 
    The GNU General Public License is contained in the file COPYING.
+
+   Modified 2026-11-02 by the hotpath-rs project
+   (https://github.com/hotpath-rs/valgrind): on arm64 a RET pops the
+   call stack down to the frame it returns from, matched by SP and
+   return address. See README.hotpath.
 */
 
 #include "global.h"
@@ -652,6 +657,41 @@ void CLG_(setup_bbcc)(BB* bb)
        * The latter condition is needed because on PPC, SP can stay
        * the same over CALL=b(c)l / RET=b(c)lr boundaries
        */
+#if defined(VGA_arm64)
+      /* On arm64 a call keeps the return address in x30, so SP after a
+       * RET equals the SP recorded for the returning frame, not one above
+       * it as on x86. Frames left above it (e.g. the skipped PLT frame of
+       * a "bl foo@plt", which shares SP and return address with the frame
+       * of foo itself) are then not unwound by SP, and the single pop the
+       * generic code grants is spent on them, leaving the returning frame
+       * open: every later call nests inside it and inclusive costs
+       * overlap. So look down the frames this RET can leave (SP not above
+       * ours) for the one it returns from, and pop through it plus any
+       * further frames recorded for the same call site.
+       * (hotpath-rs, 2026-11-02) */
+      {
+	  Int i, match = -1;
+	  for (i = csp_up; i >= 0; i--) {
+	      call_entry* ce = &(CLG_(current_call_stack).entry[i]);
+	      if (ce->sp > sp) break;
+	      if (ce->sp == sp && ce->ret_addr == bb_addr(bb)) {
+		  match = i;
+		  while (match > 0) {
+		      call_entry* below =
+			  &(CLG_(current_call_stack).entry[match-1]);
+		      if (below->sp != sp || below->ret_addr != bb_addr(bb))
+			  break;
+		      match--;
+		  }
+		  break;
+	      }
+	  }
+	  if (match >= 0) {
+	      popcount_on_return = csp - match;
+	      goto return_checked;
+	  }
+      }
+#endif
       if (sp < top_ce->sp) popcount_on_return = 0;
       else if (top_ce->sp == sp) {
 	  while(1) {
@@ -668,6 +708,9 @@ void CLG_(setup_bbcc)(BB* bb)
 	      break;
 	  }
       }
+#if defined(VGA_arm64)
+    return_checked:
+#endif
       if (popcount_on_return == 0) {
 	  jmpkind = jk_Jump;
 	  ret_without_call = True;

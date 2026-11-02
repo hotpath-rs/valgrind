@@ -7,8 +7,13 @@ https://sourceware.org/git/valgrind.git and https://valgrind.org/.
 
 Fork: https://github.com/hotpath-rs/valgrind
 Base: upstream tag VALGRIND_3_28_0 (Valgrind 3.28.0)
-Version string: 3.28.0.hotpath-rs (`valgrind --version`, Callgrind `creator:`)
-Release tag: VALGRIND_3_28_0_HOTPATH_RS, never moved.
+Version string: 3.28.0.hotpath-rs-2 (`valgrind --version`, Callgrind `creator:`)
+Release tag: VALGRIND_3_28_0_HOTPATH_RS_2, never moved.
+
+Every release that changes instruction counts gets a new version string
+and tag (3.28.0.hotpath-rs-<n>, VALGRIND_3_28_0_HOTPATH_RS_<n>), so reports
+from different builds are never compared with each other. Earlier tags stay
+published as the complete corresponding source of their binaries.
 
 
 License
@@ -60,6 +65,38 @@ Modifications
 
   Possibly related upstream report:
   https://bugs.kde.org/show_bug.cgi?id=472460
+
+2026-11-02  configure.ac, .github/workflows/release.yml
+
+  Version suffix `hotpath-rs-2` (tag VALGRIND_3_28_0_HOTPATH_RS_2) for
+  the release carrying the callgrind/bbcc.c fix below: it changes arm64
+  inclusive counts, so its reports must not be compared with those of
+  3.28.0.hotpath-rs. The release workflow accepts the hotpath-rs-<n>
+  suffix and its matching tag.
+
+2026-11-02  callgrind/bbcc.c (setup_bbcc, RET handling, arm64 only)
+
+  On arm64 a call keeps its return address in x30, so after a RET the
+  SP equals the SP Callgrind recorded for the returning frame (on x86
+  the call pushed the return address, so the frame lies strictly below
+  the SP after the RET and is always unwound). A RET is granted one pop
+  for frames at the same SP. When another frame sat above the returning
+  one, that pop was spent on it and the returning frame stayed open.
+  The usual source is "bl foo@plt": the skipped PLT stub's frame and
+  foo's frame share the SP and the return address, and foo's RET popped
+  only foo's frame. The stale frame then made the caller's RET leave the
+  caller open too. From then on, every later call nested inside the
+  open frames, and the open frames' inclusive costs kept growing until
+  the thread unwound past them. Symptoms: spurious recursion (`fn'2`)
+  between unrelated sibling calls, and inclusive costs per function far
+  above the program total. Exclusive (self) costs were not affected.
+
+  Fix: on a RET, Callgrind looks down the frames at or below the
+  current SP for the one whose SP equals the current SP and whose
+  return address is the RET target. It pops through that frame and
+  through any frames under it recorded for the same call (same SP and
+  return address). If no frame matches, the upstream logic applies
+  unchanged. Other architectures are not affected.
 
 2026-11-01  configure.ac
 
